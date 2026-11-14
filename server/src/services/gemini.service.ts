@@ -22,20 +22,38 @@ export class GeminiService {
     const client = getGeminiClient();
 
     try {
-      const response = await client.models.generateContent({
-        model: GEMINI_MODEL_NAME,
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `${SYSTEM_PROMPT}\n\n---\n\n${prompt}` }],
-          },
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.2,
-          maxOutputTokens: 3500,
-        },
-      });
+      const modelsToTry = [GEMINI_MODEL_NAME, GEMINI_MODEL_NAME, 'gemini-2.5-flash-lite'];
+      let response: any;
+      let lastError: any;
+
+      for (const modelName of modelsToTry) {
+        try {
+          response = await client.models.generateContent({
+            model: modelName,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${SYSTEM_PROMPT}\n\n---\n\n${prompt}` }],
+              },
+            ],
+            config: {
+              responseMimeType: 'application/json',
+              temperature: 0.2,
+              maxOutputTokens: 3500,
+            },
+          });
+          if (response) break;
+        } catch (err: any) {
+          lastError = err;
+          if (err?.status === 503 || String(err?.message).includes('503')) {
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!response) throw lastError;
 
       // Extract generated text
       const rawText = response.text || '';
